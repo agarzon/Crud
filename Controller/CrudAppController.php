@@ -8,109 +8,195 @@ class CrudAppController extends Controller {
 		'Session',
 	);
 
-/**
- * List of fields to include in the find when editing.
- * If $this->_editFields is null $this->paginate will be used.
- *
- * @var array $_editFields
- */
+	/**
+	 * List of fields to include in the find when editing.
+	 * If $this->_editFields is null $this->paginate will be used.
+	 *
+	 * @var array $_editFields
+	 */
 	protected $_editFields = array();
 
-/**
- * List of model fields to be saved.
- *
- * @var array $_fieldList
- */
+	/**
+	 * List of model fields to be saved.
+	 *
+	 * @var array $_fieldList
+	 */
 	protected $_fieldList = array();
 
-/**
- * Default actions
- *
- * @var array $_defaultActions
- */
+	/**
+	 * Default actions
+	 *
+	 * @var array $_defaultActions
+	 */
 	protected $_defaultActions = array(
 		'admin_index',
 		'admin_list',
 		'admin_add',
+		'admin_duplicate',
 		'admin_edit',
 		'admin_delete',
 	);
 
-/**
- * Default paginate fields
- *
- * @var array
- */
+	/**
+	 * Default paginate fields
+	 *
+	 * @var array
+	 */
 	public $paginate = array();
 
-/**
- * This controller does not use a model
- *
- * @var array
- */
+	/**
+	 * This controller does not use a model
+	 *
+	 * @var array
+	 */
 	public $uses = array();
 
 	/* DEFAULT SET OF ADMIN ACTIONS */
 
-/**
- * admin_index default action
- *
- * @return string json response
- */
+	/**
+	 * admin_index default action
+	 *
+	 * @return string json response
+	 */
 	public function admin_index() {
-		$this->_index();
+		// Hack to get only ENG translations for grids
+		$this->{$this->modelClass}->locale = 'eng';
+		$this->_paginateJson($this->paginate());
 	}
 
-/**
- * admin_list default action
- *
- * @return string json response
- */
+	/**
+	 * admin_list default action
+	 *
+	 * @return string json response
+	 */
 	public function admin_list() {
-		$this->_getList();
+		// Hack to query only ENG translation
+		$this->{$this->modelClass}->locale = 'eng';
+
+		$list = $this->{$this->modelClass}->find('all', array(
+			'order' => array('id DESC'),
+			'recursive' => -1
+		));
+
+		$list = Set::extract("{n}.{$this->modelClass}", $list);
+		$this->_setJson($list);
 	}
 
-/**
- * admin_add default action
- *
- * @return string json response
- */
+	/**
+	 * admin_add default action
+	 *
+	 * @return string json response
+	 */
 	public function admin_add() {
-		$this->_add();
+		if ($this->request->is('post')) {
+			$this->{$this->modelClass}->create();
+			if ($this->{$this->modelClass}->save($this->request->data, true, $this->__getFieldList())) {
+				$this->_setSuccessJson($this->{$this->modelClass}->id);
+			} else {
+				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be created");
+			}
+		} else {
+			$this->_setFailedJson();
+		}
 	}
 
-/**
- * admin_edit default action
- *
- * @param integer $id identifier
- * @param boolean $duplicate duplicate entry if is true
- * @return string json response
- */
+	/**
+	 * admin_duplicate default action
+	 *
+	 * @return string json response
+	 */
+	public function admin_duplicate($id = null) {
+		$this->admin_edit($id, true);
+	}
+
+	/**
+	 * admin_edit default action
+	 *
+	 * @param integer $id identifier
+	 * @param boolean $duplicate duplicate entry if is true
+	 * @return string json response
+	 */
 	public function admin_edit($id = null, $duplicate = false) {
-		$this->_edit($id, $duplicate);
+		if ($this->request->is('post')) {
+			if ($duplicate) {
+				$this->{$this->modelClass}->id = null;
+				$this->{$this->modelClass}->create();
+			} else {
+				$this->{$this->modelClass}->id = $id;
+			}
+
+			if ($this->{$this->modelClass}->save($this->request->data, true, $editFields = $this->__getFieldList())) {
+				$this->_setSuccessJson($this->{$this->modelClass}->id);
+			} else {
+				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be saved");
+			}
+		} elseif ($id != null) {
+			if (empty($this->_editFields)) {
+				$this->_editFields = $this->paginate;
+			} elseif (!isset($this->_editFields['fields'])) {
+				$this->_editFields = array('fields' => $this->_editFields);
+			}
+			$data = $this->{$this->modelClass}->find('first', array_merge(
+				$this->_editFields,
+				array('conditions' => array("{$this->modelClass}.id" => $id))
+				));
+			if (!empty($data)) {
+				$this->_setJson($data);
+			} else {
+				$this->_setFailedJson('The data couldn\'t be loaded');
+			}
+		} else {
+			$this->_setFailedJson();
+		}
 	}
 
-/**
- * admin_delete default action
- *
- * @param integer $ids identifiers
- * @return string json response
- */
+	/**
+	 * admin_delete default action
+	 *
+	 * @param integer $ids identifiers
+	 * @return string json response
+	 */
 	public function admin_delete($ids) {
-		$this->_delete($ids);
+		if (!empty($ids)) {
+			$ids = json_decode($ids);
+			$fail = false;
+
+			if (is_array($ids)) {
+				// Deletion loop
+				foreach ($ids as $id) {
+					if (!$this->{$this->modelClass}->delete($id)) {
+						$fail = true;
+					}
+				}
+			} else {
+				$id = $ids;
+				// Deletion simple
+				if (!$this->{$this->modelClass}->delete($id)) {
+					$fail = true;
+				}
+			}
+
+			if (!$fail) {
+				$this->_setSuccessJson($id);
+			} else {
+				$this->_setFailedJson();
+			}
+		} else {
+			$this->_setFailedJson();
+		}
 	}
 
 	/* RENDERS */
 
-/**
- * Watch for inactivity sessions
- *
- * Return the following vars:
- * boolean 'logged' if user has session authenticated
- * integer 'remainingTime' showing the time remainning before session expire, in minutes.
- *
- * @return json
- */
+	/**
+	 * Watch for inactivity sessions
+	 *
+	 * Return the following vars:
+	 * boolean 'logged' if user has session authenticated
+	 * integer 'remainingTime' showing the time remaining before session expire, in minutes.
+	 *
+	 * @return json
+	 */
 	public function watcher() {
 		$user = $this->Session->read('Auth.User');
 		$data['logged'] = !empty($user);
@@ -121,25 +207,25 @@ class CrudAppController extends Controller {
 		$this->render('/Elements/json', 'ajax');
 	}
 
-/**
- * Renders the data array as json.
- *
- * @param array $data data to convert to json
- * @return void
- */
+	/**
+	 * Renders the data array as json.
+	 *
+	 * @param array $data data to convert to json
+	 * @return void
+	 */
 	protected function _setJson($data = array()) {
 		$this->set(compact('data'));
 		$this->plugin = 'Crud';
 		$this->render('/Elements/json', 'ajax');
 	}
 
-/**
- * Renders the paginate data array as json
- *
- * @param array $data The paginated result
- * @param string $model The root of the paginated result, used to parse the json with ExtJS
- * @return void
- */
+	/**
+	 * Renders the paginate data array as json
+	 *
+	 * @param array $data The paginated result
+	 * @param string $model The root of the paginated result, used to parse the json with ExtJS
+	 * @return void
+	 */
 	protected function _paginateJson($data = array(), $model = null) {
 		if ($model == null) {
 			$model = $this->modelClass;
@@ -150,16 +236,16 @@ class CrudAppController extends Controller {
 		$this->render('/Elements/paginated_json', 'ajax');
 	}
 
-/**
- * Renders a success json response.
- *
- * You must provide an id if you want to execute the js callback
- * of the onSubmit function of Beezid.FormWindow.js.
- *
- * @param string $id identifier
- * @param string $msg message
- * @return void
- */
+	/**
+	 * Renders a success json response.
+	 *
+	 * You must provide an id if you want to execute the js callback
+	 * of the onSubmit function of Beezid.FormWindow.js.
+	 *
+	 * @param string $id identifier
+	 * @param string $msg message
+	 * @return void
+	 */
 	protected function _setSuccessJson($id = null, $msg = '') {
 		$success = array('success' => true);
 		if ($id || $msg) {
@@ -168,12 +254,12 @@ class CrudAppController extends Controller {
 		$this->_setJson($success);
 	}
 
-/**
- * Renders a failed message as json
- *
- * @param string $errorMessage message to show as error
- * @return void
- */
+	/**
+	 * Renders a failed message as json
+	 *
+	 * @param string $errorMessage message to show as error
+	 * @return void
+	 */
 	protected function _setFailedJson($errorMessage = '') {
 		$this->set(compact('errorMessage'));
 		$this->plugin = 'Crud';
@@ -182,15 +268,15 @@ class CrudAppController extends Controller {
 
 	/* INTERNAL FUNCTIONS */
 
-/**
- * This method will automatically add conditions to the pagination based
- * on the grid filters.
- *
- * @param mixed $object extended object
- * @param array $scope extended scope
- * @param array $whitelist extended whiterlist
- * @return class parent::paginate modified
- */
+	/**
+	 * This method will automatically add conditions to the pagination based
+	 * on the grid filters.
+	 *
+	 * @param mixed $object extended object
+	 * @param array $scope extended scope
+	 * @param array $whitelist extended whiterlist
+	 * @return class parent::paginate modified
+	 */
 	public function paginate($object = null, $scope = array(), $whitelist = array()) {
 		// Set sort if is requested by query
 		if (isset($this->request->query['sort'])) {
@@ -223,13 +309,13 @@ class CrudAppController extends Controller {
 		return parent::paginate($object, $scope, $whitelist);
 	}
 
-/**
- * Creates the pagination conditions based on the filter received
- *
- * @param array &$scope Reference of the pagination scope
- * @param array $filters The filters posted
- * @return void
- */
+	/**
+	 * Creates the pagination conditions based on the filter received
+	 *
+	 * @param array &$scope Reference of the pagination scope
+	 * @param array $filters The filters posted
+	 * @return void
+	 */
 	private function __setPaginationScope(&$scope = array(), $filters = array()) {
 		foreach ($filters as $filter) {
 			// Verifies if the field strats with '_' (Multiple filter for the same field)
@@ -337,12 +423,12 @@ class CrudAppController extends Controller {
 		}
 	}
 
-/**
- * Returns a list of model fields to be saved.
- * If not specified the fields specified in AppController::_editFields.
- *
- * @return array Field list to be saved.
- */
+	/**
+	 * Returns a list of model fields to be saved.
+	 * If not specified the fields specified in AppController::_editFields.
+	 *
+	 * @return array Field list to be saved.
+	 */
 	private function __getFieldList() {
 		if (!empty($this->_fieldList)) {
 			return $this->_fieldList;
@@ -366,136 +452,11 @@ class CrudAppController extends Controller {
 
 	/* CRUD */
 
-/**
- * Default index action
- *
- * @return [type] [description]
- */
-	protected function _index() {
-		// Hack to get only ENG translations for grids
-		$this->{$this->modelClass}->locale = DEFAULT_LANGUAGE;
-		$this->_paginateJson($this->paginate());
-	}
-
-/**
- * Default get_list action
- *
- * @return string json response
- */
-	protected function _getList() {
-		// Hack to query only ENG translation
-		$this->{$this->modelClass}->locale = DEFAULT_LANGUAGE;
-
-		$list = $this->{$this->modelClass}->find('all', array(
-			'order' => array('id DESC'),
-			'recursive' => -1
-		));
-
-		$list = Set::extract("{n}.{$this->modelClass}", $list);
-		$this->_setJson($list);
-	}
-
-/**
- * Default add action
- *
- * @return string json response
- */
-	protected function _add() {
-		if ($this->request->is('post')) {
-			$this->{$this->modelClass}->create();
-			if ($this->{$this->modelClass}->save($this->request->data, true, $this->__getFieldList())) {
-				$this->_setSuccessJson($this->{$this->modelClass}->id);
-			} else {
-				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be created");
-			}
-		} else {
-			$this->_setFailedJson();
-		}
-	}
-
-/**
- * Default edit action
- * The find fields list is based on the $this->_editFields or $this->paginate array.
- *
- * @param integer $id identifier
- * @param boolean $duplicate duplicate entry if is true
- * @return string json response
- */
-	protected function _edit($id = null, $duplicate = false) {
-		if ($this->request->is('post')) {
-			if ($duplicate) {
-				$this->{$this->modelClass}->id = null;
-				$this->{$this->modelClass}->create();
-			} else {
-				$this->{$this->modelClass}->id = $id;
-			}
-
-			if ($this->{$this->modelClass}->save($this->request->data, true, $editFields = $this->__getFieldList())) {
-				$this->_setSuccessJson($this->{$this->modelClass}->id);
-			} else {
-				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be saved");
-			}
-		} elseif ($id != null) {
-			if (empty($this->_editFields)) {
-				$this->_editFields = $this->paginate;
-			} elseif (!isset($this->_editFields['fields'])) {
-				$this->_editFields = array('fields' => $this->_editFields);
-			}
-			$data = $this->{$this->modelClass}->find('first', array_merge(
-				$this->_editFields,
-				array('conditions' => array("{$this->modelClass}.id" => $id))
-				));
-			if (!empty($data)) {
-				$this->_setJson($data);
-			} else {
-				$this->_setFailedJson('The data couldn\'t be loaded');
-			}
-		} else {
-			$this->_setFailedJson();
-		}
-	}
-
-/**
- * Default delete action
- *
- * @param array $ids identifiers
- * @return string json response
- */
-	protected function _delete($ids = null) {
-		if (!empty($ids)) {
-			$ids = json_decode($ids);
-			$fail = false;
-
-			if (is_array($ids)) {
-				// Deletion loop
-				foreach ($ids as $id) {
-					if (!$this->{$this->modelClass}->delete($id)) {
-						$fail = true;
-					}
-				}
-			} else {
-				$id = $ids;
-				// Deletion simple
-				if (!$this->{$this->modelClass}->delete($id)) {
-					$fail = true;
-				}
-			}
-
-			if (!$fail) {
-				$this->_setSuccessJson($id);
-			} else {
-				$this->_setFailedJson();
-			}
-		} else {
-			$this->_setFailedJson();
-		}
-	}
-
-/**
- * Add ENGLISH - FRENCH
- *
- * @return json
- */
+	/**
+	 * Add ENGLISH - FRENCH
+	 *
+	 * @return json
+	 */
 	protected function _addMultiLang() {
 		if ($this->request->is('post')) {
 
@@ -522,13 +483,13 @@ class CrudAppController extends Controller {
 		}
 	}
 
-/**
- * Edit or duplicate ENGLISH - FRENCH
- *
- * @param integer $id identifier
- * @param boolean $duplicate duplicate entry if is true
- * @return json
- */
+	/**
+	 * Edit or duplicate ENGLISH - FRENCH
+	 *
+	 * @param integer $id identifier
+	 * @param boolean $duplicate duplicate entry if is true
+	 * @return json
+	 */
 	protected function _editMultiLang($id = null, $duplicate = false) {
 		$this->{$this->modelClass}->Behaviors->enable('Translate');
 		$dataSource = $this->{$this->modelClass}->getDataSource();
