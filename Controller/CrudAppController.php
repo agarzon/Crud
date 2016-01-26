@@ -1,12 +1,6 @@
 <?php
 
-App::uses('Controller', 'Controller');
-
-class CrudAppController extends Controller {
-
-	public $components = array(
-		'Session',
-	);
+trait CrudAppController {
 
 	/**
 	 * List of fields to include in the find when editing.
@@ -34,24 +28,8 @@ class CrudAppController extends Controller {
 		'admin_add',
 		'admin_duplicate',
 		'admin_edit',
-		'admin_delete',
+		'admin_delete'
 	);
-
-	/**
-	 * Default paginate fields
-	 *
-	 * @var array
-	 */
-	public $paginate = array();
-
-	/**
-	 * This controller does not use a model
-	 *
-	 * @var array
-	 */
-	public $uses = array();
-
-	/* DEFAULT SET OF ADMIN ACTIONS */
 
 	/**
 	 * admin_index default action
@@ -183,6 +161,81 @@ class CrudAppController extends Controller {
 			}
 		} else {
 			$this->_setFailedJson();
+		}
+	}
+
+	/**
+	 * Add ENGLISH - FRENCH
+	 *
+	 * @return json
+	 */
+	protected function _addMultiLang() {
+		if ($this->request->is('post')) {
+
+			$this->{$this->modelClass}->create();
+			$dataSource = $this->{$this->modelClass}->getDataSource();
+			$dataSource->begin($this->{$this->modelClass});
+
+			$commit = false;
+			$this->{$this->modelClass}->Behaviors->enable('Translate');
+			$this->{$this->modelClass}->locale = 'fra';
+			$commit = $this->{$this->modelClass}->save($this->request->data[$this->modelClass . 'Fra']);
+			$this->{$this->modelClass}->locale = 'eng';
+			$commit = $this->{$this->modelClass}->save($this->request->data) && $commit;
+
+			if ($commit) {
+				$dataSource->commit($this->{$this->modelClass});
+				$this->_setSuccessJson($this->{$this->modelClass}->id);
+			} else {
+				$dataSource->rollback($this->{$this->modelClass});
+				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be created");
+			}
+		} else {
+			$this->_setFailedJson();
+		}
+	}
+
+	/**
+	 * Edit or duplicate ENGLISH - FRENCH
+	 *
+	 * @param integer $id identifier
+	 * @param boolean $duplicate duplicate entry if is true
+	 * @return json
+	 */
+	protected function _editMultiLang($id = null, $duplicate = false) {
+		$this->{$this->modelClass}->Behaviors->enable('Translate');
+		$dataSource = $this->{$this->modelClass}->getDataSource();
+		$dataSource->begin($this->{$this->modelClass});
+		$commit = false;
+
+		if ($this->request->is('post')) {
+
+			// Save as new record
+			if ($duplicate) {
+				$this->{$this->modelClass}->id = null;
+				$this->{$this->modelClass}->create();
+			} else {
+				$this->{$this->modelClass}->id = $id;
+			}
+
+			$this->{$this->modelClass}->locale = 'fra';
+			$commit = $this->{$this->modelClass}->save($this->request->data[$this->modelClass . 'Fra']);
+			$this->{$this->modelClass}->locale = 'eng';
+			$commit = $this->{$this->modelClass}->save($this->request->data) && $commit;
+
+			if ($commit) {
+				$dataSource->commit($this->{$this->modelClass});
+				$this->_setSuccessJson($this->{$this->modelClass}->id);
+			} else {
+				$dataSource->rollback($this->{$this->modelClass});
+				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be saved");
+			}
+		} else {
+			$this->{$this->modelClass}->locale = 'eng';
+			$this->request->data = $this->{$this->modelClass}->read(null, $id);
+			$this->{$this->modelClass}->locale = 'fra';
+			$this->request->data[$this->modelClass . 'Fra'] = $this->{$this->modelClass}->read(null, $id);
+			$this->_setJson($this->request->data);
 		}
 	}
 
@@ -448,83 +501,6 @@ class CrudAppController extends Controller {
  */
 	private function __getHumanizedName() {
 		return Inflector::humanize(Inflector::singularize($this->{$this->modelClass}->table));
-	}
-
-	/* CRUD */
-
-	/**
-	 * Add ENGLISH - FRENCH
-	 *
-	 * @return json
-	 */
-	protected function _addMultiLang() {
-		if ($this->request->is('post')) {
-
-			$this->{$this->modelClass}->create();
-			$dataSource = $this->{$this->modelClass}->getDataSource();
-			$dataSource->begin($this->{$this->modelClass});
-
-			$commit = false;
-			$this->{$this->modelClass}->Behaviors->enable('Translate');
-			$this->{$this->modelClass}->locale = 'fra';
-			$commit = $this->{$this->modelClass}->save($this->request->data[$this->modelClass . 'Fra']);
-			$this->{$this->modelClass}->locale = 'eng';
-			$commit = $this->{$this->modelClass}->save($this->request->data) && $commit;
-
-			if ($commit) {
-				$dataSource->commit($this->{$this->modelClass});
-				$this->_setSuccessJson($this->{$this->modelClass}->id);
-			} else {
-				$dataSource->rollback($this->{$this->modelClass});
-				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be created");
-			}
-		} else {
-			$this->_setFailedJson();
-		}
-	}
-
-	/**
-	 * Edit or duplicate ENGLISH - FRENCH
-	 *
-	 * @param integer $id identifier
-	 * @param boolean $duplicate duplicate entry if is true
-	 * @return json
-	 */
-	protected function _editMultiLang($id = null, $duplicate = false) {
-		$this->{$this->modelClass}->Behaviors->enable('Translate');
-		$dataSource = $this->{$this->modelClass}->getDataSource();
-		$dataSource->begin($this->{$this->modelClass});
-		$commit = false;
-
-		if ($this->request->is('post')) {
-
-			// Save as new record
-			if ($duplicate) {
-				$this->{$this->modelClass}->id = null;
-				$this->{$this->modelClass}->create();
-			} else {
-				$this->{$this->modelClass}->id = $id;
-			}
-
-			$this->{$this->modelClass}->locale = 'fra';
-			$commit = $this->{$this->modelClass}->save($this->request->data[$this->modelClass . 'Fra']);
-			$this->{$this->modelClass}->locale = 'eng';
-			$commit = $this->{$this->modelClass}->save($this->request->data) && $commit;
-
-			if ($commit) {
-				$dataSource->commit($this->{$this->modelClass});
-				$this->_setSuccessJson($this->{$this->modelClass}->id);
-			} else {
-				$dataSource->rollback($this->{$this->modelClass});
-				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be saved");
-			}
-		} else {
-			$this->{$this->modelClass}->locale = 'eng';
-			$this->request->data = $this->{$this->modelClass}->read(null, $id);
-			$this->{$this->modelClass}->locale = 'fra';
-			$this->request->data[$this->modelClass . 'Fra'] = $this->{$this->modelClass}->read(null, $id);
-			$this->_setJson($this->request->data);
-		}
 	}
 
 }
