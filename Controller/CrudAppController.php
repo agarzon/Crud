@@ -103,7 +103,7 @@ trait CrudAppController {
 				$this->{$this->modelClass}->id = $id;
 			}
 
-			if ($this->{$this->modelClass}->save($this->request->data, true, $editFields = $this->__getFieldList())) {
+			if ($this->{$this->modelClass}->save($this->request->data, true, $this->__getFieldList())) {
 				$this->_setSuccessJson($this->{$this->modelClass}->id);
 			} else {
 				$this->_setFailedJson("The {$this->__getHumanizedName()} couldn't be saved");
