@@ -254,10 +254,9 @@ trait CrudAppController {
 		$user = $this->Session->read('Auth.User');
 		$data['logged'] = !empty($user);
 		$data['remainingTime'] = round(($this->Session->read('Config.time') - time()) / 60);
-
-		$this->set(compact('data'));
-		$this->plugin = 'Crud';
-		$this->render('/Elements/json', 'ajax');
+		$this->autoRender = false;
+		$this->response->type('json');
+		$this->response->body(json_encode($data));
 	}
 
 	/**
@@ -267,9 +266,9 @@ trait CrudAppController {
 	 * @return void
 	 */
 	protected function _setJson($data = array()) {
-		$this->set(compact('data'));
-		$this->plugin = 'Crud';
-		$this->render('/Elements/json', 'ajax');
+		$this->autoRender = false;
+		$this->response->type('json');
+		$this->response->body(json_encode($data));
 	}
 
 	/**
@@ -284,9 +283,9 @@ trait CrudAppController {
 			$model = $this->modelClass;
 		}
 
-		$this->set(compact('model', 'data'));
-		$this->plugin = 'Crud';
-		$this->render('/Elements/paginated_json', 'ajax');
+		$this->autoRender = false;
+		$this->response->type('json');
+		$this->response->body(json_encode(array('total' => $this->request->params['paging'][$model]['count'], $model => $data)));
 	}
 
 	/**
@@ -314,9 +313,9 @@ trait CrudAppController {
 	 * @return void
 	 */
 	protected function _setFailedJson($errorMessage = '') {
-		$this->set(compact('errorMessage'));
-		$this->plugin = 'Crud';
-		$this->render('/Elements/failed_json', 'ajax');
+		$this->autoRender = false;
+		$this->response->type('json');
+		$this->response->body(json_encode(array('success' => false, 'errorMessage' => $errorMessage, 'validationErrors' => $this->{$this->modelClass}->validationErrors)));
 	}
 
 	/* INTERNAL FUNCTIONS */
