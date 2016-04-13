@@ -1,11 +1,11 @@
-# CRUD 
+# CRUD
 
 Crud Plugin for CakePHP 2.x designed to be used with ExtJS
 
 ## Installing
 
 Add into bootstrap.php
-```CakePlugin::load('Crud', array('routes' => true));```
+```CakePlugin::load('Crud');```
 
 Add into your AppController.php
 (before *class AppController*)
